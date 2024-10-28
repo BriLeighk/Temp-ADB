@@ -61,7 +61,7 @@ class _MainPageState extends State<MainPage> {
             Text(widget.title),
             if (appState.isConnected) ...[
               const SizedBox(width: 8.0),
-              ConnectionTag(),
+              const Icon(Icons.check_circle, color: Colors.green),
             ],
           ],
         ),

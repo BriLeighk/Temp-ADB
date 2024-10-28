@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
@@ -26,18 +25,6 @@ class AppState extends ChangeNotifier {
     if (_isConnected != isConnected) {
       _isConnected = isConnected;
       notifyListeners();
-    }
-  }
-
-  void updateConnectionStatus(BuildContext context, bool isConnected) {
-    if (isConnected) {
-      // Show connected UI
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Devices are connected!')));
-    } else {
-      // Show disconnected UI
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Devices are not connected.')));
     }
   }
 }
