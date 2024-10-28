@@ -2,15 +2,19 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ADB-OTG.iml" filepath="$PROJECT_DIR$/.idea/modules/ADB-OTG.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.androidTest.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.main.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-OTG.adblib.unitTest.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.androidTest.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.main.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-OTG.app.unitTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ADB-SafeScan.iml" filepath="$PROJECT_DIR$/.idea/modules/ADB-SafeScan.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.main.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/adblib/ADB-SafeScan.adblib.unitTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.main.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/app/ADB-SafeScan.app.unitTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.iml" filepath="$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.main.iml" filepath="$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.unitTest.iml" />
     </modules>
   </component>
 </project>

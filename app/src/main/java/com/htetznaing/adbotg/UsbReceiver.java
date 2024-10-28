@@ -4,20 +4,30 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.usb.UsbManager;
-import android.os.Parcelable;
-import android.util.Log;
-
-import static com.htetznaing.adbotg.Message.USB_PERMISSION;
+import io.flutter.embedding.engine.FlutterEngine;
+import io.flutter.plugin.common.MethodChannel;
 
 public class UsbReceiver extends BroadcastReceiver {
+    private static final String CHANNEL = "com.htetznaing.adbotg/usb_receiver";
+    private final FlutterEngine flutterEngine;
+
+    public UsbReceiver(FlutterEngine flutterEngine) {
+        this.flutterEngine = flutterEngine;
+    }
+
     @Override
     public void onReceive(Context context, Intent intent) {
         String action;
-        Log.d("UsbReceiver","Broadcasting USB_CONNECTED");
-        if (intent!=null && (action = intent.getAction()) !=null && action.equals(UsbManager.ACTION_USB_DEVICE_ATTACHED)){
-            Intent intent1 = new Intent(USB_PERMISSION);
-            intent1.putExtra(UsbManager.EXTRA_DEVICE, (Parcelable) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE));
-            context.sendBroadcast(intent1);
+        if (intent != null && (action = intent.getAction()) != null) {
+            if (action.equals(UsbManager.ACTION_USB_DEVICE_ATTACHED)) {
+                // Notify Flutter about USB connection
+                new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
+                        .invokeMethod("usbConnected", null);
+            } else if (action.equals(UsbManager.ACTION_USB_DEVICE_DETACHED)) {
+                // Notify Flutter about USB disconnection
+                new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
+                        .invokeMethod("usbDisconnected", null);
+            }
         }
     }
 }

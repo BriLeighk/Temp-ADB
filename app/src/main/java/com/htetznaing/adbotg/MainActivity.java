@@ -51,6 +51,11 @@ import static com.htetznaing.adbotg.Message.DEVICE_NOT_FOUND;
 import static com.htetznaing.adbotg.Message.FLASHING;
 import static com.htetznaing.adbotg.Message.INSTALLING_PROGRESS;
 
+import io.flutter.embedding.android.FlutterActivity;
+import io.flutter.embedding.engine.FlutterEngine;
+import io.flutter.embedding.engine.dart.DartExecutor;
+import io.flutter.plugin.common.MethodChannel;
+
 public class MainActivity extends AppCompatActivity implements TextView.OnEditorActionListener, View.OnKeyListener {
     private Handler handler;
     private UsbDevice mDevice;
@@ -68,10 +73,35 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
     private boolean doubleBackToExitPressedOnce = false;
     private AdbStream stream;
     private SpinnerDialog waitingDialog;
+    private static final String CHANNEL = "com.htetznaing.adbotg/usb_receiver";
+    private FlutterEngine flutterEngine;
+    private boolean usbConnectionDetected = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // Initialize FlutterEngine
+        flutterEngine = new FlutterEngine(this);
+        flutterEngine.getDartExecutor().executeDartEntrypoint(
+            DartExecutor.DartEntrypoint.createDefault()
+        );
+
+        // Set up MethodChannel to communicate with Flutter
+        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
+            .setMethodCallHandler(
+                (call, result) -> {
+                    if (call.method.equals("setTargetState")) {
+                        usbConnectionDetected = true;
+                        updateFlutterConnectionState(true);
+                    } else if (call.method.equals("setSourceState")) {
+                        usbConnectionDetected = false;
+                        updateFlutterConnectionState(false);
+                    }
+                    result.success(null);
+                }
+            );
 
         // Enable the up button
         if (getSupportActionBar() != null) {
@@ -94,14 +124,8 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                 switch (msg.what) {
                     case DEVICE_FOUND:
                         closeWaiting();
-                        tvStatus.setText(getString(R.string.adb_device_connected));
-                        usb_icon.setColorFilter(Color.parseColor("#4CAF50"));
-                        checkContainer.setVisibility(View.GONE);
-                        terminalView.setVisibility(View.VISIBLE);
-                        initCommand();
-                        showKeyboard();
+                        updateUIForConnectionStatus(true);
                         break;
-
                     case CONNECTING:
                         waitingDialog();
                         closeKeyboard();
@@ -110,20 +134,13 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                         checkContainer.setVisibility(View.VISIBLE);
                         terminalView.setVisibility(View.GONE);
                         break;
-
                     case DEVICE_NOT_FOUND:
                         closeWaiting();
-                        closeKeyboard();
-                        tvStatus.setText(getString(R.string.adb_device_not_connected));
-                        usb_icon.setColorFilter(Color.RED);
-                        checkContainer.setVisibility(View.VISIBLE);
-                        terminalView.setVisibility(View.GONE);
+                        updateUIForConnectionStatus(false);
                         break;
-
                     case FLASHING:
                         Toast.makeText(MainActivity.this, "Flashing", Toast.LENGTH_SHORT).show();
                         break;
-
                     case INSTALLING_PROGRESS:
                         Toast.makeText(MainActivity.this, "Progress", Toast.LENGTH_SHORT).show();
                         break;
@@ -180,6 +197,7 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         edCommand.setImeActionLabel("Run", EditorInfo.IME_ACTION_DONE);
         edCommand.setOnEditorActionListener(this);
         edCommand.setOnKeyListener(this);
+
 
 //        //Guide
 //        LinearLayout guideContainer = findViewById(R.id.guideContainer);
@@ -478,6 +496,33 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
             return onEditorAction((TextView)v, EditorInfo.IME_ACTION_DONE, event);
         } else {
             return false;
+        }
+    }
+
+    private void openMainActivity() {
+        Intent intent = new Intent(this, MainActivity.class);
+        startActivity(intent);
+    }
+
+    private void updateFlutterConnectionState(boolean isConnected) {
+        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
+            .invokeMethod(isConnected ? "usbConnected" : "usbDisconnected", null);
+    }
+
+    private void updateUIForConnectionStatus(boolean isConnected) {
+        if (isConnected) {
+            tvStatus.setText(getString(R.string.adb_device_connected));
+            usb_icon.setColorFilter(Color.parseColor("#4CAF50"));
+            checkContainer.setVisibility(View.GONE);
+            terminalView.setVisibility(View.GONE); // Hide terminal view
+            // Show connected button
+            findViewById(R.id.connected_button).setVisibility(View.VISIBLE);
+        } else {
+            tvStatus.setText(getString(R.string.adb_device_not_connected));
+            usb_icon.setColorFilter(Color.RED);
+            checkContainer.setVisibility(View.VISIBLE);
+            terminalView.setVisibility(View.GONE);
+            findViewById(R.id.connected_button).setVisibility(View.GONE);
         }
     }
 }

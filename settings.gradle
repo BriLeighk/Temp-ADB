@@ -1,1 +1,6 @@
-include ':app', ':adblib'
+include ':app', ':flutter', ':adblib'
+
+setBinding(new Binding([gradle: this]))
+evaluate(new File(
+        rootProject.projectDir, 'privacy_scan_module/.android/include_flutter.groovy'
+))

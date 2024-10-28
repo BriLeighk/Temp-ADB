@@ -136,4 +136,13 @@
 
     </RelativeLayout>
 
+    <Button
+        android:id="@+id/connected_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Connected"
+        android:backgroundTint="@android:color/holo_green_dark"
+        android:textColor="@android:color/white"
+        android:visibility="gone" />
+
 </RelativeLayout>

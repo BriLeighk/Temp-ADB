@@ -5,13 +5,14 @@
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
-        <option name="gradleHome" value="/usr/local/Cellar/gradle/5.2.1/libexec" />
-        <option name="gradleJvm" value="#GRADLE_LOCAL_JAVA_HOME" />
+        <option name="gradleHome" value="$PROJECT_DIR$/../../../../Gradle/gradle-8.4" />
+        <option name="gradleJvm" value="jbr-17" />
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/adblib" />
             <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/privacy_scan_module/.android/Flutter" />
           </set>
         </option>
         <option name="resolveExternalAnnotations" value="false" />
