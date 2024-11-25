@@ -50,16 +50,22 @@ import static com.htetznaing.adbotg.Message.DEVICE_FOUND;
 import static com.htetznaing.adbotg.Message.DEVICE_NOT_FOUND;
 import static com.htetznaing.adbotg.Message.FLASHING;
 import static com.htetznaing.adbotg.Message.INSTALLING_PROGRESS;
+import java.util.List;
+import java.util.Map;
 
 import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.embedding.engine.dart.DartExecutor;
 import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.BinaryMessenger;
 
+/**
+ * Main activity of the application, handling USB connections, ADB commands, and user interactions.
+ */
 public class MainActivity extends AppCompatActivity implements TextView.OnEditorActionListener, View.OnKeyListener {
     private Handler handler;
     private UsbDevice mDevice;
-    private TextView tvStatus,logs;
+    private TextView tvStatus, logs;
     private ImageView usb_icon;
     private AdbCrypto adbCrypto;
     private AdbConnection adbConnection;
@@ -76,37 +82,20 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
     private static final String CHANNEL = "com.htetznaing.adbotg/usb_receiver";
     private FlutterEngine flutterEngine;
     private boolean usbConnectionDetected = false;
+    private MethodChannel methodChannel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Initialize FlutterEngine
-        flutterEngine = new FlutterEngine(this);
-        flutterEngine.getDartExecutor().executeDartEntrypoint(
-            DartExecutor.DartEntrypoint.createDefault()
-        );
+        // Initialize MethodChannel
+        FlutterEngine flutterEngine = new FlutterEngine(this);
+        methodChannel = new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL);
 
-        // Set up MethodChannel to communicate with Flutter
-        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
-            .setMethodCallHandler(
-                (call, result) -> {
-                    if (call.method.equals("setTargetState")) {
-                        usbConnectionDetected = true;
-                        updateFlutterConnectionState(true);
-                    } else if (call.method.equals("setSourceState")) {
-                        usbConnectionDetected = false;
-                        updateFlutterConnectionState(false);
-                    }
-                    result.success(null);
-                }
-            );
-
-        // Enable the up button
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        }
+        // Initialize additional method channels
+        AppDetailsChannelHandler.setup(flutterEngine.getDartExecutor().getBinaryMessenger());
+        SpywareChannelHandler.setup(flutterEngine.getDartExecutor().getBinaryMessenger());
 
         tvStatus = findViewById(R.id.tv_status);
         usb_icon = findViewById(R.id.usb_icon);
@@ -124,27 +113,37 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                 switch (msg.what) {
                     case DEVICE_FOUND:
                         closeWaiting();
-                        updateUIForConnectionStatus(true);
+                        tvStatus.setText(getString(R.string.adb_device_connected));
+                        tvStatus.setTextColor(Color.parseColor("#4CAF50"));
+                        usb_icon.setColorFilter(Color.parseColor("#4CAF50"));
+                        checkContainer.setVisibility(View.VISIBLE);
+                        initCommand(); // Initiate adb connection command
+                        sendConnectionStatusBroadcast(true); // Notify Flutter
                         break;
+
                     case CONNECTING:
                         waitingDialog();
-                        closeKeyboard();
                         tvStatus.setText(getString(R.string.waiting_device));
                         usb_icon.setColorFilter(Color.BLUE);
                         checkContainer.setVisibility(View.VISIBLE);
-                        terminalView.setVisibility(View.GONE);
                         break;
+
                     case DEVICE_NOT_FOUND:
                         closeWaiting();
-                        updateUIForConnectionStatus(false);
+                        tvStatus.setText(getString(R.string.adb_device_not_connected));
+                        tvStatus.setTextColor(Color.RED);
+                        usb_icon.setColorFilter(Color.RED);
+                        checkContainer.setVisibility(View.VISIBLE);
+                        sendConnectionStatusBroadcast(false); // Notify Flutter
                         break;
+
                     case FLASHING:
                         Toast.makeText(MainActivity.this, "Flashing", Toast.LENGTH_SHORT).show();
                         break;
+
                     case INSTALLING_PROGRESS:
                         Toast.makeText(MainActivity.this, "Progress", Toast.LENGTH_SHORT).show();
                         break;
-
                 }
             }
         };
@@ -153,7 +152,7 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         try {
             adbCrypto = AdbCrypto.loadAdbKeyPair(base64, new File(getFilesDir(), "private_key"), new File(getFilesDir(), "public_key"));
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(Const.TAG, "Failed to load ADB key pair", e);
         }
 
         if (adbCrypto == null) {
@@ -161,7 +160,7 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                 adbCrypto = AdbCrypto.generateAdbKeyPair(base64);
                 adbCrypto.saveAdbKeyPair(new File(getFilesDir(), "private_key"), new File(getFilesDir(), "public_key"));
             } catch (Exception e) {
-                Log.w(Const.TAG, "fail to generate and save key-pair", e);
+                Log.w(Const.TAG, "Failed to generate and save key-pair", e);
             }
         }
 
@@ -171,25 +170,25 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
 
         ContextCompat.registerReceiver(this, mUsbReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
 
-        //Check USB
+        // Check USB
         UsbDevice device = getIntent().getParcelableExtra(UsbManager.EXTRA_DEVICE);
-        if (device!=null) {
+        if (device != null) {
             System.out.println("From Intent!");
             asyncRefreshAdbConnection(device);
-        }else {
+        } else {
             System.out.println("From onCreate!");
             for (String k : mManager.getDeviceList().keySet()) {
                 UsbDevice usbDevice = mManager.getDeviceList().get(k);
                 handler.sendEmptyMessage(CONNECTING);
-                if (mManager.hasPermission(usbDevice)) { ;
+                if (mManager.hasPermission(usbDevice)) {
                     asyncRefreshAdbConnection(usbDevice);
                 } else {
                     mManager.requestPermission(
-                            usbDevice,
-                            PendingIntent.getBroadcast(getApplicationContext(),
-                                    0,
-                                    new Intent(Message.USB_PERMISSION),
-                                    PendingIntent.FLAG_IMMUTABLE));
+                        usbDevice,
+                        PendingIntent.getBroadcast(getApplicationContext(),
+                            0,
+                            new Intent(Message.USB_PERMISSION),
+                            PendingIntent.FLAG_IMMUTABLE));
                 }
             }
         }
@@ -197,35 +196,23 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         edCommand.setImeActionLabel("Run", EditorInfo.IME_ACTION_DONE);
         edCommand.setOnEditorActionListener(this);
         edCommand.setOnKeyListener(this);
-
-
-//        //Guide
-//        LinearLayout guideContainer = findViewById(R.id.guideContainer);
-//        String [] split = getString(R.string.guide_for_dev_option).split("=============================");
-//        for (String a:split){
-//            String[] b = a.trim().split("\n");
-//            String mTitle = b[0];
-//            String content = a.replace(mTitle,"").replace(b[1],"").trim();
-//
-//            View view = getLayoutInflater().inflate(R.layout.list_item,null);
-//            TextView title = view.findViewById(R.id.title);
-//            title.setText(mTitle);
-//            ExpandableTextView exp = view.findViewById(R.id.expand_text_view);
-//            exp.setText(content);
-//
-//            guideContainer.addView(view);
-//        }
     }
 
-    private void closeWaiting(){
-        if (waitingDialog!=null)
+    /**
+     * Closes the waiting dialog if it is open.
+     */
+    private void closeWaiting() {
+        if (waitingDialog != null)
             waitingDialog.dismiss();
     }
 
-    private void waitingDialog(){
+    /**
+     * Displays a waiting dialog with a message.
+     */
+    private void waitingDialog() {
         closeWaiting();
         waitingDialog = SpinnerDialog.displayDialog(this, "IMPORTANT ⚡",
-                        "You may need to accept a prompt on the target device if you are connecting "+
+                "You may need to accept a prompt on the target device if you are connecting " +
                         "to it for the first time from this device.", false);
     }
 
@@ -238,17 +225,10 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case android.R.id.home:
-                // Handle the up button click
-                onBackPressed();
-                return true;
-            case R.id.go_to_github:
-                startActivity(new Intent(Intent.ACTION_VIEW).setData(Uri.parse("https://github.com/KhunHtetzNaing/ADB-OTG")));
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
+        if (item.getItemId() == R.id.go_to_github) {
+            startActivity(new Intent(Intent.ACTION_VIEW).setData(Uri.parse("https://github.com/KhunHtetzNaing/ADB-OTG")));
         }
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
@@ -258,6 +238,10 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         asyncRefreshAdbConnection((UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE));
     }
 
+    /**
+     * Asynchronously refreshes the ADB connection for the given USB device.
+     * @param device The USB device to connect to.
+     */
     public void asyncRefreshAdbConnection(final UsbDevice device) {
         if (device != null) {
             new Thread() {
@@ -273,10 +257,14 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
             }.start();
         }
     }
+
+    /**
+     * Broadcast receiver for USB events.
+     */
     BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            Log.d(Const.TAG, "mUsbReceiver onReceive => "+action);
+            Log.d(Const.TAG, "mUsbReceiver onReceive => " + action);
             if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 String deviceName = device.getDeviceName();
@@ -288,19 +276,23 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                         Log.w(Const.TAG, "setAdbInterface(null,null) failed", e);
                     }
                 }
-            }else if (Message.USB_PERMISSION.equals(action)){
+            } else if (Message.USB_PERMISSION.equals(action)) {
                 System.out.println("From receiver!");
                 UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 handler.sendEmptyMessage(CONNECTING);
                 if (mManager.hasPermission(usbDevice))
                     asyncRefreshAdbConnection(usbDevice);
                 else
-                    mManager.requestPermission(usbDevice,PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(Message.USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE));
+                    mManager.requestPermission(usbDevice, PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(Message.USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE));
             }
         }
     };
 
-    // searches for an adb interface on the given USB device
+    /**
+     * Searches for an ADB interface on the given USB device.
+     * @param device The USB device to search.
+     * @return The ADB interface if found, null otherwise.
+     */
     private UsbInterface findAdbInterface(UsbDevice device) {
         int count = device.getInterfaceCount();
         for (int i = 0; i < count; i++) {
@@ -313,7 +305,14 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         return null;
     }
 
-    // Sets the current USB device and interface
+    /**
+     * Sets the current USB device and interface.
+     * @param device The USB device to set.
+     * @param intf The USB interface to set.
+     * @return True if the interface was set successfully, false otherwise.
+     * @throws IOException If an I/O error occurs.
+     * @throws InterruptedException If the operation is interrupted.
+     */
     private synchronized boolean setAdbInterface(UsbDevice device, UsbInterface intf) throws IOException, InterruptedException {
         if (adbConnection != null) {
             adbConnection.close();
@@ -341,7 +340,6 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         }
 
         handler.sendEmptyMessage(DEVICE_NOT_FOUND);
-
         mDevice = null;
         return false;
     }
@@ -361,12 +359,14 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                 adbConnection = null;
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.e(Const.TAG, "Error closing ADB connection", e);
         }
-
     }
 
-    private void initCommand(){
+    /**
+     * Initializes the command input and output.
+     */
+    private void initCommand() {
         // Open the shell stream of ADB
         logs.setText("");
         try {
@@ -374,101 +374,80 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return;
-        } catch (InterruptedException e) {
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
             return;
         }
 
-        // Start the receiving thread
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (!stream.isClosed()) {
-                    try {
-                        // Print each thing we read from the shell stream
-                        final String[] output = {new String(stream.read(), "US-ASCII")};
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (user == null) {
-                                    user = output[0].substring(0,output[0].lastIndexOf("/")+1);
-                                }else if (output[0].contains(user)){
-                                    System.out.println("End => "+user);
-                                }
+        new Thread(() -> {
+            while (!stream.isClosed()) {
+                try {
+                    final String[] output = {new String(stream.read(), "US-ASCII")};
+                    runOnUiThread(() -> {
+                        if (user == null) {
+                            user = output[0].substring(0, output[0].lastIndexOf("/") + 1);
+                        } else if (output[0].contains(user)) {
+                            System.out.println("End => " + user);
+                        }
 
-                                logs.append(output[0]);
+                        logs.append(output[0]);
 
-                                scrollView.post(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        scrollView.fullScroll(ScrollView.FOCUS_DOWN);
-                                        edCommand.requestFocus();
-                                    }
-                                });
-                            }
+                        scrollView.post(() -> {
+                            scrollView.fullScroll(ScrollView.FOCUS_DOWN);
+                            edCommand.requestFocus();
                         });
-                    } catch (UnsupportedEncodingException e) {
-                        e.printStackTrace();
-                        return;
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                        return;
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        return;
-                    }
+                    });
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                    return;
+                } catch (IOException | InterruptedException e) {
+                    e.printStackTrace();
+                    return;
                 }
             }
         }).start();
 
-        btnRun.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                putCommand();
-            }
-        });
+        btnRun.setOnClickListener(v -> putCommand());
     }
 
+    /**
+     * Sends a command to the ADB shell.
+     */
     private void putCommand() {
-        if (!edCommand.getText().toString().isEmpty()){
-            // We become the sending thread
+        if (!edCommand.getText().toString().isEmpty()) {
             try {
                 String cmd = edCommand.getText().toString();
                 if (cmd.equalsIgnoreCase("clear")) {
                     String log = logs.getText().toString();
                     String[] logSplit = log.split("\n");
-                    logs.setText(logSplit[logSplit.length-1]);
-                }else if (cmd.equalsIgnoreCase("exit")) {
+                    logs.setText(logSplit[logSplit.length - 1]);
+                } else if (cmd.equalsIgnoreCase("exit")) {
                     finish();
-                }else {
-                    stream.write((cmd+"\n").getBytes("UTF-8"));
+                } else {
+                    stream.write((cmd + "\n").getBytes("UTF-8"));
                 }
                 edCommand.setText("");
-            } catch (IOException e) {
-                e.printStackTrace();
-            } catch (InterruptedException e) {
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
-        }else Toast.makeText(MainActivity.this, "No command", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(MainActivity.this, "No command", Toast.LENGTH_SHORT).show();
+        }
     }
 
     public void open(View view) {
-
     }
 
-    public void showKeyboard(){
+    public void showKeyboard() {
         edCommand.requestFocus();
-        InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
     }
 
-    public void closeKeyboard(){
+    public void closeKeyboard() {
         View view = this.getCurrentFocus();
         if (view != null) {
-            InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
         }
     }
@@ -499,30 +478,13 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         }
     }
 
-    private void openMainActivity() {
-        Intent intent = new Intent(this, MainActivity.class);
-        startActivity(intent);
-    }
-
-    private void updateFlutterConnectionState(boolean isConnected) {
-        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
-            .invokeMethod(isConnected ? "usbConnected" : "usbDisconnected", null);
-    }
-
-    private void updateUIForConnectionStatus(boolean isConnected) {
-        if (isConnected) {
-            tvStatus.setText(getString(R.string.adb_device_connected));
-            usb_icon.setColorFilter(Color.parseColor("#4CAF50"));
-            checkContainer.setVisibility(View.GONE);
-            terminalView.setVisibility(View.GONE); // Hide terminal view
-            // Show connected button
-            findViewById(R.id.connected_button).setVisibility(View.VISIBLE);
-        } else {
-            tvStatus.setText(getString(R.string.adb_device_not_connected));
-            usb_icon.setColorFilter(Color.RED);
-            checkContainer.setVisibility(View.VISIBLE);
-            terminalView.setVisibility(View.GONE);
-            findViewById(R.id.connected_button).setVisibility(View.GONE);
-        }
+    /**
+     * Sends a broadcast to notify about the USB connection status.
+     * @param isConnected True if the device is connected, false otherwise.
+     */
+    private void sendConnectionStatusBroadcast(boolean isConnected) {
+        Intent intent = new Intent("com.htetznaing.adbotg.USB_STATUS");
+        intent.putExtra("isConnected", isConnected);
+        sendBroadcast(intent);
     }
 }

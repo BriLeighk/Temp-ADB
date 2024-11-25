@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
+ * Handles the process of pushing files to a remote device using ADB.
  * Created by xudong on 2/25/14.
  */
 public class Push {
@@ -20,12 +21,24 @@ public class Push {
     private File local;
     private String remotePath;
 
+    /**
+     * Constructs a Push object with the specified ADB connection, local file, and remote path.
+     * @param adbConnection The ADB connection to use.
+     * @param local The local file to push.
+     * @param remotePath The remote path to push the file to.
+     */
     public Push(AdbConnection adbConnection, File local, String remotePath) {
         this.adbConnection = adbConnection;
         this.local = local;
         this.remotePath = remotePath;
     }
 
+    /**
+     * Executes the file push operation.
+     * @param handler The handler to send progress updates to.
+     * @throws InterruptedException If the operation is interrupted.
+     * @throws IOException If an I/O error occurs.
+     */
     public void execute(Handler handler) throws InterruptedException, IOException {
 
         AdbStream stream = adbConnection.open("sync:");

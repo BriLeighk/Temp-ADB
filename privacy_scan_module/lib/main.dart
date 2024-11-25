@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'app_state.dart';
 import 'main_page.dart';
 
-// Main entry point of SpywareScan
+// Main entry point of the app
 void main() {
   runApp(
     ChangeNotifierProvider(
@@ -13,8 +13,9 @@ void main() {
   );
 }
 
-// App Name, Color Scheme
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(

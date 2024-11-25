@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'app_state.dart';
 import 'package:provider/provider.dart';
+import 'app_state.dart';
 
 class PrivacyScanPage extends StatelessWidget {
   final bool scanTarget;
 
   const PrivacyScanPage({super.key, required this.scanTarget});
-
-  static const platform = MethodChannel('com.htetznaing.adbotg/main_activity');
 
   @override
   Widget build(BuildContext context) {
@@ -19,10 +16,26 @@ class PrivacyScanPage extends StatelessWidget {
         title: Row(
           children: [
             Text(scanTarget ? 'Target: Privacy Scan' : 'Privacy Scan'),
-            if (appState.isConnected) ...[
-              const SizedBox(width: 8.0),
-              const Icon(Icons.check_circle, color: Colors.green),
-            ],
+            const SizedBox(width: 8.0),
+            if (appState.isConnected)
+              DropdownButton<String>(
+                value: appState.selectedDevice,
+                items: [
+                  DropdownMenuItem(
+                    value: appState.sourceDeviceName,
+                    child: Text(appState.sourceDeviceName),
+                  ),
+                  DropdownMenuItem(
+                    value: appState.targetDeviceName,
+                    child: Text(appState.targetDeviceName),
+                  ),
+                ],
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    appState.selectDevice(newValue);
+                  }
+                },
+              ),
           ],
         ),
       ),

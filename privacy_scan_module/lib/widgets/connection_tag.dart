@@ -3,12 +3,14 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 
 class ConnectionTag extends StatelessWidget {
+  const ConnectionTag({super.key});
+
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
 
     if (!appState.isConnected) {
-      return SizedBox.shrink(); // Return an empty widget if not connected
+      return const SizedBox.shrink(); // Return an empty widget if not connected
     }
 
     return Container(

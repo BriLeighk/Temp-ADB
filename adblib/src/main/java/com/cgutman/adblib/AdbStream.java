@@ -116,8 +116,7 @@ public class AdbStream implements Closeable {
 				readQueue.wait();
 			}
 
-
-			if (isClosed) {
+			if (isClosed && data == null) {
 				throw new IOException("Stream closed");
 			}
 		}

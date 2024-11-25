@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app_state.dart';
-import 'widgets/connection_tag.dart';
 import 'app_scan_page.dart';
 import 'privacy_scan_page.dart';
 import 'package:flutter/services.dart';
@@ -18,29 +17,6 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   static const platform = MethodChannel('com.htetznaing.adbotg/main_activity');
 
-  void _updateConnectionStatus(bool status) {
-    setState(() {});
-  }
-
-  void _performScan({required bool scanTarget}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AppScanPage(scanTarget: scanTarget),
-      ),
-    );
-  }
-
-  void _performPrivacyScan({required bool scanTarget}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PrivacyScanPage(scanTarget: scanTarget),
-      ),
-    );
-  }
-
-  // Method to open MainActivity
   Future<void> _openMainActivity() async {
     try {
       await platform.invokeMethod('openMainActivity');
@@ -59,10 +35,26 @@ class _MainPageState extends State<MainPage> {
         title: Row(
           children: [
             Text(widget.title),
-            if (appState.isConnected) ...[
-              const SizedBox(width: 8.0),
-              const Icon(Icons.check_circle, color: Colors.green),
-            ],
+            const SizedBox(width: 8.0),
+            if (appState.isConnected)
+              DropdownButton<String>(
+                value: appState.selectedDevice,
+                items: [
+                  DropdownMenuItem(
+                    value: appState.sourceDeviceName,
+                    child: Text(appState.sourceDeviceName),
+                  ),
+                  DropdownMenuItem(
+                    value: appState.targetDeviceName,
+                    child: Text(appState.targetDeviceName),
+                  ),
+                ],
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    appState.selectDevice(newValue);
+                  }
+                },
+              ),
           ],
         ),
         actions: [
@@ -109,50 +101,24 @@ class _MainPageState extends State<MainPage> {
                     endIndent: 20,
                   ),
                 ),
-                const Padding(
-                    padding:
-                        EdgeInsets.symmetric(vertical: 5.0, horizontal: 15.0),
-                    child: Text(
-                      'Scanning your device will '
-                      'alert you of any potentially harmful apps on your device, ranked '
-                      'from most to least harmful.',
-                      style: TextStyle(fontSize: 14),
-                    )),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5.0),
-                  child: ElevatedButton(
-                    onPressed: appState.isConnected
-                        ? () => _performScan(scanTarget: true)
-                        : () => _performScan(scanTarget: false),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(200, 60),
-                    ),
-                    child: Text(appState.isConnected
-                        ? 'Target: Scan Device'
-                        : 'Scan Device'),
-                  ),
-                ),
-                const Padding(
-                    padding:
-                        EdgeInsets.symmetric(vertical: 5.0, horizontal: 15.0),
-                    child: Text(
-                      '\nConducting a privacy scan will '
-                      'provide you with some popular social media apps on your device '
-                      'that may need privacy setting adjustments, and give you the option '
-                      'to clear browsing traces.',
-                      style: TextStyle(fontSize: 14),
-                    )),
                 ElevatedButton(
-                  onPressed: appState.isConnected
-                      ? () => _performPrivacyScan(scanTarget: true)
-                      : () => _performPrivacyScan(scanTarget: false),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(200, 60),
-                    padding: const EdgeInsets.symmetric(vertical: 5.0),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AppScanPage(scanTarget: true),
+                    ),
                   ),
-                  child: Text(appState.isConnected
-                      ? 'Target: Privacy Scan'
-                      : 'Privacy Scan'),
+                  child: const Text('Perform App Scan'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          const PrivacyScanPage(scanTarget: true),
+                    ),
+                  ),
+                  child: const Text('Perform Privacy Scan'),
                 ),
               ],
             ),

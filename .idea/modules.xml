@@ -15,6 +15,14 @@
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.androidTest.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.main.iml" filepath="$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/privacy_scan_module/.android/Flutter/ADB-SafeScan.flutter.unitTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.iml" filepath="$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.main.iml" filepath="$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/538309458/ADB-SafeScan.path_provider_android.unitTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.iml" filepath="$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.main.iml" filepath="$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/-1264324741/ADB-SafeScan.url_launcher_android.unitTest.iml" />
     </modules>
   </component>
 </project>

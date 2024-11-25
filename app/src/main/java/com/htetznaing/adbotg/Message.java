@@ -1,6 +1,7 @@
 package com.htetznaing.adbotg;
 
 /**
+ * Defines message codes and constants for status updates and communication.
  * Created by xudong on 2/7/14.
  */
 public class Message {
@@ -11,5 +12,7 @@ public class Message {
     public static final int INSTALLING_PROGRESS = 4;
     public static final int PUSH_PART = 5;
     public static final int PM_INST_PART = 6;
+    
+    // USB permission action string
     public static final String USB_PERMISSION = "htetznaing.usb.permission";
 }
