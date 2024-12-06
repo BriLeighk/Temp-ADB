@@ -5,6 +5,7 @@ import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbEndpoint;
 import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbRequest;
+import android.util.Log;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -52,46 +53,66 @@ public class UsbChannel implements AdbChannel {
         int totalRead = 0;
         int retryCount = 0;
         final int MAX_RETRIES = 3;
+        boolean wasInterrupted = false;
         
-        while (totalRead < length) {
-            ByteBuffer buf = ByteBuffer.allocate(length - totalRead);
-            UsbRequest request = getInRequest();
-            request.queue(buf, length - totalRead);
-            
-            // Wait for the request with timeout
-            UsbRequest response = mDeviceConnection.requestWait();
-            if (response != request) {
+        while (totalRead < length && !wasInterrupted) {
+            try {
+                ByteBuffer buf = ByteBuffer.allocate(length - totalRead);
+                UsbRequest request = getInRequest();
+                if (request == null) {
+                    throw new IOException("Failed to obtain USB request object");
+                }
+                
+                request.queue(buf, length - totalRead);
+                
+                // Wait for the request with timeout
+                UsbRequest response = mDeviceConnection.requestWait();
+                if (response == null || response != request) {
+                    releaseInRequest(request);
+                    if (++retryCount > MAX_RETRIES) {
+                        throw new IOException("USB read failed after " + MAX_RETRIES + " retries");
+                    }
+                    Thread.sleep(100); // Increased delay between retries
+                    continue;
+                }
+                
+                int bytesRead = buf.position();
+                if (bytesRead > 0) {
+                    buf.rewind();
+                    buf.get(buffer, totalRead, bytesRead);
+                    totalRead += bytesRead;
+                    retryCount = 0; // Reset retry count on successful read
+                } else if (++retryCount > MAX_RETRIES) {
+                    throw new IOException("No data read from USB after " + MAX_RETRIES + " attempts");
+                }
+                
                 releaseInRequest(request);
-                if (++retryCount > MAX_RETRIES) {
-                    throw new IOException("requestWait failed after " + MAX_RETRIES + " retries");
+                
+            } catch (InterruptedException e) {
+                wasInterrupted = true;
+                Thread.currentThread().interrupt(); // Preserve interrupt status
+                throw new IOException("USB read interrupted", e);
+            } finally {
+                if (wasInterrupted) {
+                    // Clean up resources if interrupted
+                    closeConnection();
                 }
-                continue;
             }
-            
-            int bytesRead = buf.position();
-            if (bytesRead <= 0) {
-                releaseInRequest(request);
-                if (++retryCount > MAX_RETRIES) {
-                    throw new IOException("No data read from USB after " + MAX_RETRIES + " retries");
-                }
-                // Add a small delay before retry
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("USB read interrupted");
-                }
-                continue;
+        }
+        
+        if (totalRead < length && !wasInterrupted) {
+            throw new IOException("Incomplete read: expected " + length + " bytes, got " + totalRead);
+        }
+    }
+
+    private void closeConnection() {
+        try {
+            if (mDeviceConnection != null) {
+                mDeviceConnection.close();
             }
-            
-            // Reset retry count on successful read
-            retryCount = 0;
-            
-            buf.rewind();
-            buf.get(buffer, totalRead, bytesRead);
-            totalRead += bytesRead;
-            
-            releaseInRequest(request);
+        } catch (Exception e) {
+            // Log but don't throw as this is cleanup code
+            Log.w("UsbChannel", "Error closing device connection", e);
         }
     }
 
