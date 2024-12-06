@@ -35,6 +35,9 @@ import java.io.File;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 
 import com.cgutman.adblib.AdbConnection;
 import com.cgutman.adblib.AdbCrypto;
@@ -60,20 +63,24 @@ import com.cgutman.adblib.AdbBase64;
          * @return The list of detected spyware apps
          **/
         public static List<Map<String, Object>> getDetectedSpywareApps(List<List<String>> csvData, boolean isTargetDevice) {
+            Log.d("SpywareDetector", "Starting spyware app scan...");
+
             List<String> ids = new ArrayList<>(); // List to store the app IDs
             Map<String, String> types = new HashMap<>(); // Map to store the app types (i.e. spyware, dual-use, etc.)
 
+            
             for (int i = 1; i < csvData.size(); i++) { // Iterate through the CSV data
                 List<String> line = csvData.get(i);
                 if (!line.isEmpty()) {
                     String appId = line.get(0).trim();
                     ids.add(appId); // Add the app ID to the list
-                    Log.d("SpywareDetector", "App ID:" + appId); 
+                    
                     if (line.size() > 2) {
                         types.put(appId, line.get(2).trim()); // Add the app type to the map
                     }
                 }
             }
+            Log.d("SpywareDetector", "Successfully added all csv app ids to ids list."); 
 
             List<Map<String, Object>> detectedSpywareApps = new ArrayList<>(); // List to store apps detected as spyware
             List<String> installedApps; // List to store the installed app IDs from device
@@ -82,6 +89,7 @@ import com.cgutman.adblib.AdbBase64;
 
             if (isTargetDevice) { // If the target device is the current device
                 installedApps = detector.fetchAppsFromTargetDevice(AppContextHolder.getContext()); // Fetch the installed app IDs from the target device
+                Log.d("SpywareDetector", "Installed Apps on Target:" + installedApps.toString());
             } else { // If the target device is not the current device
                 PackageManager packageManager = AppContextHolder.getContext().getPackageManager(); // Get the package manager
                 List<ApplicationInfo> appInfoList = packageManager.getInstalledApplications(PackageManager.GET_META_DATA); // Get the list of installed applications from source device
@@ -90,9 +98,10 @@ import com.cgutman.adblib.AdbBase64;
                 for (ApplicationInfo appInfo : appInfoList) {
                     installedApps.add(appInfo.packageName); 
                 }
+                Log.d("SpywareDetector", "Installed Apps on Source:" + installedApps.toString());
             }
 
-            Log.d("SpywareDetector", "Installed Apps:" + installedApps.toString());
+            
             
             // Iterate through the list of installed apps & check if they are in the list of spyware / dual-use / offstore apps
             for (String appID : installedApps) {
@@ -101,7 +110,7 @@ import com.cgutman.adblib.AdbBase64;
                         Map<String, String> appMetadata;
                         String iconBase64;
                         if (isTargetDevice) { // fetch app metadata from target device
-                            appMetadata = detector.fetchAppMetadataFromTarget(AppContextHolder.getContext(), appID);
+                            appMetadata = detector.fetchAppMetadataFromTarget(AppContextHolder.getContext(), appID, csvData);
                             Drawable placeholderIcon = AppContextHolder.getContext().getDrawable(R.drawable.placeholder_icon);
                             iconBase64 = getBase64IconFromDrawable(placeholderIcon);
                         } else { // fetch app metadata from source device
@@ -139,14 +148,19 @@ import com.cgutman.adblib.AdbBase64;
                         // Add the app info to the list of detected spyware apps
                         detectedSpywareApps.add(appInfo);
                     } catch (PackageManager.NameNotFoundException e) {
-                        Log.w("SpywareDetector", "Package not found: " + appID, e);
+                        //Log.w("SpywareDetector", "Package not found: " + appID, e);
                     }
                 }
             }
+            
+            /*
             // Log the detected spyware apps (for debugging purposes)
             for (int i = 0; i < detectedSpywareApps.size(); i++) {
                 Log.d("SpywareDetector", "Detected spyware apps: " + detectedSpywareApps.get(i));
             }
+             
+             */
+            
             return detectedSpywareApps;
         }
 
@@ -337,77 +351,105 @@ import com.cgutman.adblib.AdbBase64;
          **/
         private List<String> executeCommand(String command) {
             List<String> detectedPackages = new ArrayList<>();
-
-            // Create a new thread to execute the command
+            final StringBuilder[] outputHolder = new StringBuilder[]{ new StringBuilder() };
+            Set<String> processedPackages = new HashSet<>();
+            AtomicBoolean isComplete = new AtomicBoolean(false);
+            
             Thread commandThread = new Thread(() -> {
-                boolean success = false; // Flag to check if the command is executed successfully
-                int retryCount = 0; // Retry count
-                final int maxRetries = 3; // Maximum number of retries
+                AdbStream stream = null;
+                try {
+                    // Establish connection if needed
+                    if (adbConnection == null || !isAdbConnected) {
+                        if (!establishAdbConnection(AppContextHolder.getContext())) {
+                            Log.e("SpywareDetector", "Failed to establish ADB connection");
+                            return;
+                        }
+                    }
 
-                while (!success && retryCount < maxRetries) {
-                    AdbStream stream = null; // Stream to read the command output
-                    try {
-                        // Open the stream
-                        stream = adbConnection.open("shell:" + command);
-                        StringBuilder output = new StringBuilder();
-                        while (!stream.isClosed()) {
-                            byte[] data = stream.read();
-                            if (data == null) {
-                                break;
-                            }
-                            output.append(new String(data, StandardCharsets.US_ASCII));
+                    // Open a single stream for the command
+                    stream = adbConnection.open("shell:" + command);
+                    
+                    // Read data until the stream is closed or we have all packages
+                    while (!stream.isClosed()) {
+                        byte[] data = stream.read(); // This blocks until data is available
+                        if (data == null) {
+                            // End of stream reached
+                            Log.d("SpywareDetector", "End of stream reached");
+                            break;
                         }
 
-                        // Process the output line by line
-                        String[] lines = output.toString().split("\n");
-                        for (String line : lines) {
+                        // Append new data to output buffer
+                        outputHolder[0].append(new String(data, StandardCharsets.US_ASCII));
+                        
+                        // Process complete lines
+                        String[] lines = outputHolder[0].toString().split("\n");
+                        int lastCompleteLine = lines.length - 1;
+                        
+                        // Don't process the last line if it doesn't end with newline
+                        // (it might be incomplete)
+                        if (!outputHolder[0].toString().endsWith("\n")) {
+                            lastCompleteLine--;
+                        }
+                        
+                        // Process complete lines
+                        for (int i = 0; i <= lastCompleteLine; i++) {
+                            String line = lines[i].trim();
                             if (line.startsWith("package:")) {
-                                // Extract the package name from the line
                                 String packageName = line.replace("package:", "").trim();
-                                // Add the package name to the list if it's not empty
-                                if (!packageName.isEmpty()) {
+                                if (!packageName.isEmpty() && !processedPackages.contains(packageName)) {
                                     detectedPackages.add(packageName);
-                                    Log.d("SpywareDetector", "Detected package: " + packageName);
+                                    processedPackages.add(packageName);
                                 }
                             }
                         }
-                        success = true; // Mark as successful if stream closes normally
-                    } catch (IOException | InterruptedException e) {
-                        Log.e("SpywareDetector", "Error executing ADB command, retrying...", e);
-                    } // Close the stream after the command is executed
-                    finally {
-                        if (stream != null) {
-                            try {
-                                stream.close();
-                            } catch (IOException e) {
-                                Log.e("SpywareDetector", "Error closing ADB stream", e);
-                            }
+                        
+                        // Keep any incomplete line for next iteration
+                        if (lastCompleteLine < lines.length - 1) {
+                            outputHolder[0] = new StringBuilder(lines[lines.length - 1]);
+                        } else {
+                            outputHolder[0] = new StringBuilder();
+                        }
+
+                        // Check if we've reached the end of the package list
+                        // This assumes the last line after packages will be a shell prompt
+                        String lastLine = lines[lines.length - 1].trim();
+                        if (!lastLine.isEmpty() && !lastLine.contains("package:") && 
+                            (lastLine.endsWith("$") || lastLine.endsWith("#"))) {
+                            Log.d("SpywareDetector", "Found shell prompt, command complete");
+                            break;
                         }
                     }
-                    // If the command is not executed successfully, retry
-                    if (!success) {
-                        retryCount++;
-                        Log.d("SpywareDetector", "Retry attempt " + retryCount + " for command: " + command);
+                    
+                    isComplete.set(true);
+                    
+                } catch (IOException | InterruptedException e) {
+                    Log.e("SpywareDetector", "Error in command execution", e);
+                } finally {
+                    if (stream != null) {
                         try {
-                            Thread.sleep(1000); // Sleep for 1 second before retrying
-                        } catch (InterruptedException e) {
-                            Log.e("SpywareDetector", "Retry sleep interrupted", e);
+                            stream.close();
+                        } catch (IOException e) {
+                            Log.e("SpywareDetector", "Error closing stream", e);
                         }
                     }
-                }
-                // If the command is not executed successfully after the maximum number of retries, log an error
-                if (!success) {
-                    Log.e("SpywareDetector", "Failed to execute command after " + maxRetries + " attempts: " + command);
                 }
             });
-            // Start the thread
+
             commandThread.start();
+            
             try {
-                commandThread.join(); // Wait for the thread to complete before returning the result
+                // Wait for the command thread with timeout
+                commandThread.join(30000);
+                if (commandThread.isAlive()) {
+                    commandThread.interrupt();
+                    Log.e("SpywareDetector", "Command thread timed out");
+                }
             } catch (InterruptedException e) {
-                Log.e("SpywareDetector", "Command thread interrupted", e);
+                Log.e("SpywareDetector", "Command thread interrupted");
+                commandThread.interrupt();
             }
-            return detectedPackages; // Return the list of app Ids
+
+            return detectedPackages;
         }
 
 
@@ -417,11 +459,10 @@ import com.cgutman.adblib.AdbBase64;
          * @param packageName - The package name of the app
          * @return The metadata of the app
          **/                    
-        private Map<String, String> fetchAppMetadataFromTarget(Context context, String packageName) {
+        private Map<String, String> fetchAppMetadataFromTarget(Context context, String packageName, List<List<String>> csvData) {
             Map<String, String> appMetadata = new HashMap<>();
             CountDownLatch latch = new CountDownLatch(1);
 
-            // Create a new thread to fetch the app metadata
             Thread metadataThread = new Thread(() -> {
                 try {
                     // If the ADB connection is not established, establish it
@@ -432,96 +473,91 @@ import com.cgutman.adblib.AdbBase64;
                         }
                     }
 
-                    // Prepare the ADB commands to fetch the app metadata
-                    String labelCommand = "dumpsys package " + packageName + " | grep \"label=\""; // Command to fetch the app name
-                    String installerCommand = "pm list packages -i | grep " + packageName; // Command to fetch the installer package name
+                    // Command to fetch app name using dumpsys
+                    String nameCommand = "cmd package list packages -f " + packageName;
+                    String nameOutput = executeAdbCommand(nameCommand);
 
-                    // Execute the ADB commands and fetch the app metadata
-                    String labelOutput = executeAdbCommand(labelCommand); // Output of the app name command
-                    String installerOutput = executeAdbCommand(installerCommand); // Output of the installer package name command
-
-                    // Extract the app name from the label output
-                    if (labelOutput.contains("label=")) {
-                        String label = labelOutput.split("label=")[1].trim();
-                        appMetadata.put("name", label);
+                    if (nameOutput != null && !nameOutput.isEmpty()) {
+                        String[] lines = nameOutput.split("\n");
+                        for (String line : lines) {
+                            if (line.contains(packageName)) {
+                                // Parse the package path
+                                String apkPath = line.substring(8, line.lastIndexOf("="));
+                                
+                                // Use aapt to get the application label
+                                String aaptCommand = "aapt dump badging " + apkPath + " | grep application-label:";
+                                String aaptOutput = executeAdbCommand(aaptCommand);
+                                
+                                if (aaptOutput != null && !aaptOutput.isEmpty()) {
+                                    if (aaptOutput.contains("application-label:")) {
+                                        String appName = aaptOutput.substring(
+                                            aaptOutput.indexOf("'") + 1, 
+                                            aaptOutput.lastIndexOf("'")
+                                        ).trim();
+                                        
+                                        if (!appName.isEmpty()) {
+                                            appMetadata.put("name", appName);
+                                            Log.d("SpywareDetector", "Found app name: " + appName + " for package: " + packageName);
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
                     }
 
-                    // Extract the installer package name from the installer output
-                    if (installerOutput.contains("installer=")) {
-                        String installer = installerOutput.split("installer=")[1].trim();
-                        appMetadata.put("installer", installer);
+                    // Fetch installer info
+                    String installerCommand = "pm list packages -i " + packageName;
+                    String installerOutput = executeAdbCommand(installerCommand);
+
+                    if (installerOutput != null && !installerOutput.isEmpty()) {
+                        String[] lines = installerOutput.split("\n");
+                        if (lines.length > 0 && lines[0].contains("installer=")) {
+                            String installer = lines[0].substring(lines[0].indexOf("installer=") + 10).trim();
+                            appMetadata.put("installer", installer);
+                            Log.d("SpywareDetector", "Found installer: " + installer + " for package: " + packageName);
+                        }
                     }
 
-                    // Handle fetching of other app metadata here (i.e. permissions, icon, etc.)
-
+                } catch (Exception e) {
+                    Log.e("SpywareDetector", "Error fetching app metadata for " + packageName, e);
                 } finally {
-                    latch.countDown(); // Signal the latch that the thread has completed
+                    latch.countDown();
                 }
             });
-            metadataThread.start(); // Start the thread
+
+            metadataThread.start();
+            
             try {
-                latch.await(); // Wait for the thread to complete before returning the result
+                // Wait for the metadata fetch to complete with a timeout
+                if (!latch.await(30, TimeUnit.SECONDS)) {
+                    Log.e("SpywareDetector", "Timeout while fetching metadata for " + packageName);
+                }
             } catch (InterruptedException e) {
-                Log.e("SpywareDetector", "Metadata thread interrupted", e);
+                Log.e("SpywareDetector", "Interrupted while fetching metadata for " + packageName, e);
             }
+
+            // If no name was found, use the name from CSV data
+            if (!appMetadata.containsKey("name")) {
+                String csvName = "Unknown App";
+                // Look for the app in the CSV data
+                for (List<String> row : csvData) {
+                    if (!row.isEmpty() && row.get(0).trim().equals(packageName)) {
+                        // Get name from column 4 (index 3)
+                        if (row.size() > 3 && row.get(3) != null && !row.get(3).trim().isEmpty()) {
+                            csvName = row.get(3).trim();
+                            break;
+                        }
+                    }
+                }
+                appMetadata.put("name", csvName);
+                Log.w("SpywareDetector", "Using CSV name for package: " + packageName + " -> " + csvName);
+            }
+
             return appMetadata;
         }
 
     
-        /**
-         * Execute the ADB command and return the output
-         * @param command - The ADB command to execute
-         * @return The output of the command
-         **/
-        private static String executeAdbCommand(String command) {
-            StringBuilder output = new StringBuilder(); // StringBuilder to store the output
-            boolean success = false; // Flag to check if the command is executed successfully
-            int retryCount = 0; // Retry count
-            final int maxRetries = 3; // Maximum number of retries
-
-            // Execute the command until it's successful or the maximum number of retries is reached
-            while (!success && retryCount < maxRetries) {
-                try {
-                    AdbStream stream = adbConnection.open("shell:" + command); // Open the stream
-                    while (!stream.isClosed()) {
-                        try {
-                            byte[] data = stream.read(); // Read the stream
-                            if (data == null) {
-                                Log.d("SpywareDetector", "No more data to read, closing stream.");
-                                success = true;
-                                break;
-                            }
-                            output.append(new String(data, StandardCharsets.US_ASCII)); // Append the output to the StringBuilder
-                        } catch (IOException e) {
-                            Log.e("SpywareDetector", "Error reading from stream, retrying...", e);
-                            break;
-                        }
-                    }
-                    stream.close(); // Close the stream after the command is executed
-                    success = true; // Mark as successful if stream closes normally
-                } catch (IOException | InterruptedException e) {
-                    Log.e("SpywareDetector", "Error executing ADB command, retrying...", e);
-                }
-
-                if (!success) {
-                    retryCount++; // Increment the retry count
-                    Log.d("SpywareDetector", "Retry attempt " + retryCount + " for command: " + command);
-                    try {
-                        Thread.sleep(1000); // Sleep for 1 second before retrying
-                    } catch (InterruptedException e) {
-                        Log.e("SpywareDetector", "Retry sleep interrupted", e);
-                    }
-                }
-            }
-
-            // If the command is not executed successfully after the maximum number of retries, log an error
-            if (!success) {
-                Log.e("SpywareDetector", "Failed to execute command after " + maxRetries + " attempts: " + command);
-            }
-
-            return output.toString(); // Return the output of the command as a String
-        }
-
         /**
          * Establish the ADB connection to the target device
          * @param context - The context of the application
@@ -575,4 +611,68 @@ import com.cgutman.adblib.AdbBase64;
         isAdbConnected = false; // Reset the flag if connection fails
         return false;
     }
+
+    /**
+         * Execute the ADB command and return the output
+         * @param command - The ADB command to execute
+         * @return The output of the command
+         **/
+        private static String executeAdbCommand(String command) {
+            StringBuilder output = new StringBuilder();
+            boolean success = false;
+            int retryCount = 0;
+            final int maxRetries = 3;
+
+            // Execute the command until it's successful or the maximum number of retries is reached
+            while (!success && retryCount < maxRetries) {
+                AdbStream stream = null;
+                try {
+                    stream = adbConnection.open("shell:" + command);
+                    while (!stream.isClosed()) {
+                        try {
+                            byte[] data = stream.read(); // Read the stream
+                            if (data == null) {
+                                Log.d("SpywareDetector", "No more data to read, closing stream.");
+                                success = true;
+                                break;
+                            }
+                            output.append(new String(data, StandardCharsets.US_ASCII)); // Append the output to the StringBuilder
+                        } catch (IOException e) {
+                            Log.e("SpywareDetector", "Error reading from stream, retrying...", e);
+                            break;
+                        }
+                    }
+                    success = true;
+                } catch (IOException | InterruptedException e) {
+                    Log.e("SpywareDetector", "Error executing ADB command, retrying...", e);
+                } finally {
+                    if (stream != null) {
+                        try {
+                            stream.close();
+                        } catch (IOException e) {
+                            Log.e("SpywareDetector", "Error closing stream", e);
+                        }
+                    }
+                }
+
+                if (!success) {
+                    retryCount++; // Increment the retry count
+                    Log.d("SpywareDetector", "Retry attempt " + retryCount + " for command: " + command);
+                    try {
+                        Thread.sleep(1000); // Sleep for 1 second before retrying
+                    } catch (InterruptedException e) {
+                        Log.e("SpywareDetector", "Retry sleep interrupted", e);
+                    }
+                }
+            }
+
+            // If the command is not executed successfully after the maximum number of retries, log an error
+            if (!success) {
+                Log.e("SpywareDetector", "Failed to execute command after " + maxRetries + " attempts: " + command);
+            }
+
+            return output.toString(); // Return the output of the command as a String
+        }
+
 }
+

@@ -276,14 +276,15 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                         Log.w(Const.TAG, "setAdbInterface(null,null) failed", e);
                     }
                 }
-            } else if (Message.USB_PERMISSION.equals(action)) {
+            } else if (Message.USB_PERMISSION.equals(action)){
                 System.out.println("From receiver!");
                 UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 handler.sendEmptyMessage(CONNECTING);
                 if (mManager.hasPermission(usbDevice))
                     asyncRefreshAdbConnection(usbDevice);
-                else
-                    mManager.requestPermission(usbDevice, PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(Message.USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE));
+                else {
+                    mManager.requestPermission(usbDevice,PendingIntent.getBroadcast(getApplicationContext(), 0, new Intent(Message.USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE));
+                }
             }
         }
     };
@@ -320,7 +321,7 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
             mDevice = null;
         }
 
-        if (device != null && intf != null) {
+         if (device != null && intf != null) {
             UsbDeviceConnection connection = mManager.openDevice(device);
             if (connection != null) {
                 if (connection.claimInterface(intf, false)) {
@@ -359,14 +360,14 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
                 adbConnection = null;
             }
         } catch (IOException e) {
-            Log.e(Const.TAG, "Error closing ADB connection", e);
+            e.printStackTrace();
         }
     }
 
     /**
      * Initializes the command input and output.
      */
-    private void initCommand() {
+    private void initCommand(){
         // Open the shell stream of ADB
         logs.setText("");
         try {
@@ -374,68 +375,92 @@ public class MainActivity extends AppCompatActivity implements TextView.OnEditor
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        } catch (InterruptedException e) {
             e.printStackTrace();
             return;
         }
 
-        new Thread(() -> {
-            while (!stream.isClosed()) {
-                try {
-                    final String[] output = {new String(stream.read(), "US-ASCII")};
-                    runOnUiThread(() -> {
-                        if (user == null) {
-                            user = output[0].substring(0, output[0].lastIndexOf("/") + 1);
-                        } else if (output[0].contains(user)) {
-                            System.out.println("End => " + user);
-                        }
+        // Start the receiving thread
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (!stream.isClosed()) {
+                    try {
+                        // Print each thing we read from the shell stream
+                        final String[] output = {new String(stream.read(), "US-ASCII")};
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (user == null) {
+                                    user = output[0].substring(0,output[0].lastIndexOf("/")+1);
+                                }else if (output[0].contains(user)){
+                                    System.out.println("End => "+user);
+                                }
 
-                        logs.append(output[0]);
+                                logs.append(output[0]);
 
-                        scrollView.post(() -> {
-                            scrollView.fullScroll(ScrollView.FOCUS_DOWN);
-                            edCommand.requestFocus();
+                                scrollView.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        scrollView.fullScroll(ScrollView.FOCUS_DOWN);
+                                        edCommand.requestFocus();
+                                    }
+                                });
+                            }
                         });
-                    });
-                } catch (UnsupportedEncodingException e) {
-                    e.printStackTrace();
-                    return;
-                } catch (IOException | InterruptedException e) {
-                    e.printStackTrace();
-                    return;
+                    } catch (UnsupportedEncodingException e) {
+                        e.printStackTrace();
+                        return;
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                        return;
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        return;
+                    }
                 }
             }
         }).start();
 
-        btnRun.setOnClickListener(v -> putCommand());
+        btnRun.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                putCommand();
+            }
+        });
     }
 
     /**
      * Sends a command to the ADB shell.
      */
     private void putCommand() {
-        if (!edCommand.getText().toString().isEmpty()) {
+        if (!edCommand.getText().toString().isEmpty()){
+            // We become the sending thread
             try {
                 String cmd = edCommand.getText().toString();
                 if (cmd.equalsIgnoreCase("clear")) {
                     String log = logs.getText().toString();
                     String[] logSplit = log.split("\n");
-                    logs.setText(logSplit[logSplit.length - 1]);
-                } else if (cmd.equalsIgnoreCase("exit")) {
+                    logs.setText(logSplit[logSplit.length-1]);
+                }else if (cmd.equalsIgnoreCase("exit")) {
                     finish();
-                } else {
-                    stream.write((cmd + "\n").getBytes("UTF-8"));
+                }else {
+                    stream.write((cmd+"\n").getBytes("UTF-8"));
                 }
                 edCommand.setText("");
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        } else {
-            Toast.makeText(MainActivity.this, "No command", Toast.LENGTH_SHORT).show();
-        }
+        }else Toast.makeText(MainActivity.this, "No command", Toast.LENGTH_SHORT).show();
     }
 
     public void open(View view) {
+
     }
 
     public void showKeyboard() {

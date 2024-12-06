@@ -49,38 +49,50 @@ public class UsbChannel implements AdbChannel {
 
     @Override
     public void readx(byte[] buffer, int length) throws IOException {
-
-        UsbRequest usbRequest = getInRequest();
-
-        ByteBuffer expected = ByteBuffer.allocate(length).order(ByteOrder.LITTLE_ENDIAN);
-        usbRequest.setClientData(expected);
-
-        if (!usbRequest.queue(expected, length)) {
-            throw new IOException("fail to queue read UsbRequest");
-        }
-
-        while (true) {
-            UsbRequest wait = mDeviceConnection.requestWait();
-
-            if (wait == null) {
-                throw new IOException("Connection.requestWait return null");
+        int totalRead = 0;
+        int retryCount = 0;
+        final int MAX_RETRIES = 3;
+        
+        while (totalRead < length) {
+            ByteBuffer buf = ByteBuffer.allocate(length - totalRead);
+            UsbRequest request = getInRequest();
+            request.queue(buf, length - totalRead);
+            
+            // Wait for the request with timeout
+            UsbRequest response = mDeviceConnection.requestWait();
+            if (response != request) {
+                releaseInRequest(request);
+                if (++retryCount > MAX_RETRIES) {
+                    throw new IOException("requestWait failed after " + MAX_RETRIES + " retries");
+                }
+                continue;
             }
-
-            ByteBuffer clientData = (ByteBuffer) wait.getClientData();
-            wait.setClientData(null);
-
-            if (wait.getEndpoint() == mEndpointOut) {
-                // a write UsbRequest complete, just ignore
-            } else if (expected == clientData) {
-                releaseInRequest(wait);
-                break;
-
-            } else {
-                throw new IOException("unexpected behavior");
+            
+            int bytesRead = buf.position();
+            if (bytesRead <= 0) {
+                releaseInRequest(request);
+                if (++retryCount > MAX_RETRIES) {
+                    throw new IOException("No data read from USB after " + MAX_RETRIES + " retries");
+                }
+                // Add a small delay before retry
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("USB read interrupted");
+                }
+                continue;
             }
+            
+            // Reset retry count on successful read
+            retryCount = 0;
+            
+            buf.rewind();
+            buf.get(buffer, totalRead, bytesRead);
+            totalRead += bytesRead;
+            
+            releaseInRequest(request);
         }
-        expected.flip();
-        expected.get(buffer);
     }
 
     // API LEVEL 18 is needed to invoke bulkTransfer(mEndpointOut, buffer, offset, buffer.length - offset, defaultTimeout)

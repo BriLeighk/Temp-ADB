@@ -112,6 +112,9 @@ public class AdbStream implements Closeable {
 		byte[] data = null;
 		synchronized (readQueue) {
 			/* Wait for the connection to close or data to be received */
+
+			// Blocks until data is available or the stream is closed
+			// Returns null if the stream is closed
 			while (!isClosed && (data = readQueue.poll()) == null) {
 				readQueue.wait();
 			}

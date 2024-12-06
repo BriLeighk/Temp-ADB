@@ -101,7 +101,7 @@ public class AppDetailsFetcher {
                 }
             }
         } catch (Exception e) {
-            Log.e("PermissionsError", "Error fetching permissions for " + packageName, e);
+            //Log.e("PermissionsError", "Error fetching permissions for " + packageName, e);
         }
 
         return grantedPermissions;
