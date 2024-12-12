@@ -5,6 +5,9 @@ import java.io.IOException;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class abstracts the underlying ADB streams
@@ -29,6 +32,8 @@ public class AdbStream implements Closeable {
 	
 	/** Indicates whether the connection is closed already */
 	private boolean isClosed;
+	
+	private final ReentrantLock streamLock = new ReentrantLock();
 	
 	/**
 	 * Creates a new AdbStream object on the specified AdbConnection
@@ -109,21 +114,24 @@ public class AdbStream implements Closeable {
 	 * @throws java.io.IOException If the stream fails while waiting
 	 */
 	public byte[] read() throws InterruptedException, IOException {
-		byte[] data = null;
-		synchronized (readQueue) {
-			/* Wait for the connection to close or data to be received */
-
-			// Blocks until data is available or the stream is closed
-			// Returns null if the stream is closed
-			while (!isClosed && (data = readQueue.poll()) == null) {
-				readQueue.wait();
+		streamLock.lock();
+		try {
+			while (!isClosed) {
+				byte[] data = readQueue.poll();
+				if (data != null) {
+					return data;
+				}
+				
+				// Use condition variable instead of wait/notify
+				Condition dataAvailable = streamLock.newCondition();
+				if (!dataAvailable.await(5, TimeUnit.SECONDS)) {
+					throw new IOException("Read timeout");
+				}
 			}
-
-			if (isClosed && data == null) {
-				throw new IOException("Stream closed");
-			}
+			throw new IOException("Stream closed");
+		} finally {
+			streamLock.unlock();
 		}
-		return data;
 	}
 
 	/**
@@ -145,18 +153,26 @@ public class AdbStream implements Closeable {
 	 */
 	public void write(byte[] payload) throws IOException, InterruptedException
 	{
-        synchronized (this) {
-			/* Make sure we're ready for a write */
-            while (!isClosed && !writeReady.compareAndSet(true, false))
-                wait();
-
-            if (isClosed) {
-                throw new IOException("Stream closed");
-            }
-        }
-
-		/* Generate a WRITE packet and send it */
-        adbConn.channel.writex(AdbProtocol.generateWrite(localId, remoteId, payload));
+		streamLock.lock();
+		try {
+			if (isClosed) {
+				throw new IOException("Stream closed");
+			}
+			
+			// Add timeout for write ready wait
+			long timeout = System.currentTimeMillis() + 5000;
+			while (!writeReady.get() && System.currentTimeMillis() < timeout) {
+				Thread.sleep(100);
+			}
+			
+			if (!writeReady.get()) {
+				throw new IOException("Write timeout - remote not ready");
+			}
+			
+			adbConn.channel.writex(AdbProtocol.generateWrite(localId, remoteId, payload));
+		} finally {
+			streamLock.unlock();
+		}
 	}
 
 	/**

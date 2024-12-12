@@ -4,7 +4,10 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.ConnectException;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class represents an ADB connection.
@@ -17,7 +20,7 @@ public class AdbConnection implements Closeable {
 	/** The last allocated local stream ID. The ID
 	 * chosen for the next stream will be this value + 1.
 	 */
-	private int lastLocalId;
+	private final AtomicInteger lastLocalId = new AtomicInteger(0);
 
 	/**
 	 * The backend thread that handles responding to ADB packets.
@@ -53,15 +56,13 @@ public class AdbConnection implements Closeable {
 	/** 
 	 * A hash map of our open streams indexed by local ID.
 	 **/
-	private HashMap<Integer, AdbStream> openStreams;
+	private final Map<Integer, AdbStream> openStreams = Collections.synchronizedMap(new HashMap<>());
 	
 	/**
 	 * Internal constructor to initialize some internal state
 	 */
 	private AdbConnection()
 	{
-		openStreams = new HashMap<Integer, AdbStream>();
-		lastLocalId = 0;
 		connectionThread = createConnectionThread();
 	}
 	
@@ -272,39 +273,43 @@ public class AdbConnection implements Closeable {
 	 */
 	public AdbStream open(String destination) throws UnsupportedEncodingException, IOException, InterruptedException
 	{
-		int localId = ++lastLocalId;
-
-		if (!connectAttempted)
-			throw new IllegalStateException("connect() must be called first");
-
-		/* Wait for the connect response */
+		int localId = lastLocalId.incrementAndGet();
+		
+		/* Add timeout to prevent indefinite waiting */
+		long timeout = System.currentTimeMillis() + 30000; /* 30 second timeout */
+		
 		synchronized (this) {
-			if (!connected)
-				wait();
-
+			while (!connected && System.currentTimeMillis() < timeout) {
+				wait(100);
+			}
+			
 			if (!connected) {
-				throw new IOException("Connection failed");
+				throw new IOException("Connection timeout or failed");
 			}
 		}
-
-		/* Add this stream to this list of half-open streams */
+		
 		AdbStream stream = new AdbStream(this, localId);
 		openStreams.put(localId, stream);
-
-		/* Send the open */
-		channel.writex(AdbProtocol.generateOpen(localId, destination));
-
-		/* Wait for the connection thread to receive the OKAY */
-		synchronized (stream) {
-			stream.wait();
+		
+		try {
+			channel.writex(AdbProtocol.generateOpen(localId, destination));
+			
+			synchronized (stream) {
+				long remainingTime = timeout - System.currentTimeMillis();
+				if (remainingTime > 0) {
+					stream.wait(remainingTime);
+				}
+			}
+			
+			if (stream.isClosed()) {
+				throw new ConnectException("Stream open actively rejected by remote peer");
+			}
+			
+			return stream;
+		} catch (Exception e) {
+			openStreams.remove(localId);
+			throw e;
 		}
-
-		/* Check if the open was rejected */
-		if (stream.isClosed())
-			throw new ConnectException("Stream open actively rejected by remote peer");
-
-		/* We're fully setup now */
-		return stream;
 	}
 
 	/**
