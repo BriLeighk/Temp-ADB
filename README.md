@@ -1,7 +1,7 @@
 # SafeScan - Spyware Detection Tool
 
 ## Overview
-SafeScan is a fork of [ADB-OTG](https://github.com/KhunHtetzNaing/ADB-OTG) that extends its functionality to create a comprehensive spyware detection tool. The project aims to assist victims of Intimate Partner Violence (IPV) by providing a secure way to detect and manage potential spyware and privacy risks on their devices.
+SafeScan utilizes [ADB-OTG](https://github.com/KhunHtetzNaing/ADB-OTG) and extends its functionality to create a comprehensive spyware detection tool. The project aims to assist victims of Intimate Partner Violence (IPV) by providing a secure way to detect and manage potential spyware and privacy risks on their devices.
 
 ### Project Evolution
 This repository builds upon the original [SafeScan](https://github.com/BriLeighk/SafeScan) project, which provided comprehensive app and privacy scanning for source devices. The current version extends these capabilities by:
